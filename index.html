@@ -1,0 +1,92 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GiShop - Catálogo</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+</head>
+<body>
+<header>
+  <div class="logo">Gi<span>Shop</span></div>
+  <nav><a href="index.html" style="color:var(--txt)">Catálogo</a><a href="admin.html">Admin</a></nav>
+</header>
+<main>
+  <div class="card">
+    <div class="filters">
+      <label>Marca<select id="f-marca"></select></label>
+      <label>Producto<select id="f-producto"></select></label>
+      <label>Talle<select id="f-talle"></select></label>
+      <button class="sec" id="reset">Limpiar</button>
+    </div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="grid" id="grid"><div class="empty">Cargando...</div></div>
+</main>
+
+<script>
+const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.GISHOP_CONFIG;
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const MARCAS = ["VOUK","VITAL","Hyperfly","Future","Progress","Bearfoot"];
+const PRODUCTOS = ["Rushguard","Shorts"];
+const TALLES = ["XS","S","M","L","XL","XXL"];
+let items = [];
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money = n => Number(n || 0).toLocaleString("es-AR", {style:"currency", currency:"ARS", maximumFractionDigits:0});
+
+function fill(id, arr, all) {
+  document.getElementById(id).innerHTML =
+    `<option value="">${all}</option>` + arr.map(v => `<option>${v}</option>`).join("");
+}
+fill("f-marca", MARCAS, "Todas");
+fill("f-producto", PRODUCTOS, "Todos");
+fill("f-talle", TALLES, "Todos");
+["f-marca","f-producto","f-talle"].forEach(id => document.getElementById(id).addEventListener("change", render));
+document.getElementById("reset").onclick = () => {
+  ["f-marca","f-producto","f-talle"].forEach(id => document.getElementById(id).value = "");
+  render();
+};
+
+async function load() {
+  const { data, error } = await sb.from("products").select("*").order("marca").order("talle");
+  if (error) { document.getElementById("grid").innerHTML = `<div class="empty err">${esc(error.message)}</div>`; return; }
+  items = data;
+  render();
+}
+
+function render() {
+  const m = document.getElementById("f-marca").value;
+  const p = document.getElementById("f-producto").value;
+  const t = document.getElementById("f-talle").value;
+  const list = items.filter(i => (!m || i.marca === m) && (!p || i.producto === p) && (!t || i.talle === t));
+
+  const total = list.reduce((a, i) => a + Number(i.stock), 0);
+  document.getElementById("stats").innerHTML = `
+    <div class="stat"><small>Productos</small><b>${list.length}</b></div>
+    <div class="stat"><small>Unidades en stock</small><b>${total}</b></div>
+    <div class="stat"><small>Con disponibilidad</small><b>${list.filter(i => i.stock > 0).length}</b></div>`;
+
+  document.getElementById("grid").innerHTML = list.length ? list.map(i => `
+    <div class="item">
+      ${i.imagen_url
+        ? `<img src="${esc(i.imagen_url)}" alt="${esc(i.producto)} ${esc(i.marca)}" loading="lazy">`
+        : `<div class="noimg" style="height:200px">Sin imagen</div>`}
+      <div class="body">
+        <h3>${esc(i.marca)} · ${esc(i.producto)}</h3>
+        <div class="meta">
+          Talle: <span class="badge">${esc(i.talle)}</span><br>
+          ${esc(i.modelo)}<br>
+          Precio: <b>${money(i.precio)}</b><br>
+          Stock: <span class="${i.stock > 0 ? "ok-txt" : "no-txt"}">${i.stock > 0 ? i.stock + " unid." : "Sin stock"}</span>
+        </div>
+      </div>
+    </div>`).join("") : `<div class="empty">No hay productos con esos filtros.</div>`;
+}
+load();
+</script>
+</body>
+</html>

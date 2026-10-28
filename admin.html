@@ -1,0 +1,285 @@
+<!-- admin.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GiShop - Admin</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+</head>
+<body>
+<header>
+  <div class="logo">Gi<span>Shop</span> <small style="color:var(--mut);font-size:13px">admin</small></div>
+  <nav>
+    <a href="index.html">Catálogo</a>
+    <a href="#" id="logout" class="hidden" style="color:var(--bad)">Salir</a>
+  </nav>
+</header>
+<main>
+
+  <!-- LOGIN -->
+  <section id="view-login" class="hidden">
+    <div class="card login">
+      <h2 style="margin-top:0">Ingresar</h2>
+      <form id="login-form">
+        <label>Gmail<input type="email" id="l-email" required></label>
+        <label>Contraseña<input type="password" id="l-pass" required></label>
+        <button type="submit" id="l-btn">Entrar</button>
+        <div id="l-msg" class="msg"></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- PANEL -->
+  <section id="view-admin" class="hidden">
+    <div class="card">
+      <h3 style="margin-top:0" id="form-title">Nuevo producto</h3>
+      <form id="item-form">
+        <input type="hidden" id="i-id">
+        <input type="hidden" id="i-old-path">
+        <div class="row" style="align-items:flex-start;gap:18px;margin-bottom:14px">
+          <img id="i-preview" class="preview" alt="Vista previa">
+          <label>Imagen del producto
+            <input type="file" id="i-file" accept="image/*">
+          </label>
+          <small class="meta" id="i-file-hint">JPG, PNG o WEBP. Máximo 5 MB.</small>
+        </div>
+        <div class="form-grid">
+          <label>Marca<select id="i-marca" required></select></label>
+          <label>Producto<select id="i-producto" required></select></label>
+          <label>Talle<select id="i-talle" required></select></label>
+          <label>Modelo / Color<input id="i-modelo"></label>
+          <label>Precio<input type="number" id="i-precio" min="0" step="0.01" value="0"></label>
+          <label>Stock<input type="number" id="i-stock" min="0" step="1" value="0" required></label>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button type="submit" class="ok" id="save-btn">Guardar</button>
+          <button type="button" class="sec" id="cancel-btn">Cancelar</button>
+          <span id="item-msg" class="msg"></span>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="filters" style="margin-bottom:14px">
+        <label>Marca<select id="a-marca"></select></label>
+        <label>Producto<select id="a-producto"></select></label>
+        <label>Talle<select id="a-talle"></select></label>
+        <label>Buscar<input id="a-q" placeholder="Modelo..."></label>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Foto</th><th>Marca</th><th>Producto</th><th>Talle</th><th>Modelo</th><th>Precio</th><th>Stock</th><th>Acciones</th></tr></thead>
+          <tbody id="adm-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const { SUPABASE_URL, SUPABASE_ANON_KEY, ADMIN_EMAIL } = window.GISHOP_CONFIG;
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true } // sesión guardada en el navegador
+});
+const BUCKET = "product-images";
+const MARCAS = ["VOUK","VITAL","Hyperfly","Future","Progress","Bearfoot"];
+const PRODUCTOS = ["Rushguard","Shorts"];
+const TALLES = ["XS","S","M","L","XL","XXL"];
+const MAX_MB = 5;
+let items = [];
+let selectedFile = null;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money = n => Number(n || 0).toLocaleString("es-AR", {style:"currency", currency:"ARS", maximumFractionDigits:0});
+const msg = (id, text, cls) => { $(id).textContent = text; $(id).className = "msg " + cls; if (text) setTimeout(() => $(id).textContent = "", 3000); };
+
+function fill(id, arr, all) {
+  $(id).innerHTML = (all ? `<option value="">${all}</option>` : "") + arr.map(v => `<option>${v}</option>`).join("");
+}
+fill("i-marca", MARCAS); fill("i-producto", PRODUCTOS); fill("i-talle", TALLES);
+fill("a-marca", MARCAS, "Todas"); fill("a-producto", PRODUCTOS, "Todos"); fill("a-talle", TALLES, "Todos");
+["a-marca","a-producto","a-talle"].forEach(id => $(id).addEventListener("change", renderTable));
+$("a-q").addEventListener("input", renderTable);
+
+/* ---------- Sesión ---------- */
+sb.auth.onAuthStateChange((_event, session) => show(session));
+
+async function show(session) {
+  const isAdmin = session && session.user.email === ADMIN_EMAIL;
+  if (session && !isAdmin) {
+    await sb.auth.signOut();
+    return msg("l-msg", "Esta cuenta no tiene permisos de administrador", "err");
+  }
+  $("view-login").classList.toggle("hidden", !!isAdmin);
+  $("view-admin").classList.toggle("hidden", !isAdmin);
+  $("logout").classList.toggle("hidden", !isAdmin);
+  if (isAdmin) loadItems();
+}
+
+$("login-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("l-btn").disabled = true;
+  const { error } = await sb.auth.signInWithPassword({
+    email: $("l-email").value.trim(),
+    password: $("l-pass").value
+  });
+  $("l-btn").disabled = false;
+  if (error) msg("l-msg", "Email o contraseña incorrectos", "err");
+});
+$("logout").addEventListener("click", e => { e.preventDefault(); sb.auth.signOut(); });
+
+/* ---------- Imagen ---------- */
+$("i-file").addEventListener("change", e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (!f.type.startsWith("image/")) { msg("item-msg", "El archivo debe ser una imagen", "err"); e.target.value = ""; return; }
+  if (f.size > MAX_MB * 1024 * 1024) { msg("item-msg", `La imagen supera ${MAX_MB} MB`, "err"); e.target.value = ""; return; }
+  selectedFile = f;
+  $("i-preview").src = URL.createObjectURL(f);
+});
+
+async function uploadImage(file) {
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${crypto.randomUUID()}.${ext}`;
+  const { error } = await sb.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
+  if (error) throw error;
+  const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
+  return { url: data.publicUrl, path };
+}
+async function removeImage(path) {
+  if (path) await sb.storage.from(BUCKET).remove([path]);
+}
+
+/* ---------- CRUD ---------- */
+async function loadItems() {
+  const { data, error } = await sb.from("products").select("*").order("marca").order("talle");
+  if (error) return msg("item-msg", error.message, "err");
+  items = data;
+  renderTable();
+}
+
+function renderTable() {
+  const m = $("a-marca").value, p = $("a-producto").value, t = $("a-talle").value;
+  const q = $("a-q").value.toLowerCase();
+  const list = items.filter(i =>
+    (!m || i.marca === m) && (!p || i.producto === p) && (!t || i.talle === t) &&
+    (!q || (i.modelo || "").toLowerCase().includes(q)));
+
+  $("adm-body").innerHTML = list.length ? list.map(i => `
+    <tr>
+      <td>${i.imagen_url ? `<img class="thumb" style="width:56px;height:56px;border-radius:6px" src="${esc(i.imagen_url)}" alt="">` : "—"}</td>
+      <td>${esc(i.marca)}</td>
+      <td>${esc(i.producto)}</td>
+      <td><span class="badge">${esc(i.talle)}</span></td>
+      <td>${esc(i.modelo)}</td>
+      <td>${money(i.precio)}</td>
+      <td>
+        <div class="row">
+          <button class="small sec" onclick="ajustar('${i.id}',-1)">−</button>
+          <b class="${i.stock > 0 ? "ok-txt" : "no-txt"}">${i.stock}</b>
+          <button class="small sec" onclick="ajustar('${i.id}',1)">+</button>
+        </div>
+      </td>
+      <td>
+        <div class="row">
+          <button class="small" onclick="editar('${i.id}')">Editar</button>
+          <button class="small danger" onclick="eliminar('${i.id}')">Borrar</button>
+        </div>
+      </td>
+    </tr>`).join("") : `<tr><td colspan="8" class="empty">Sin resultados</td></tr>`;
+}
+
+$("item-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("save-btn").disabled = true;
+  try {
+    const id = $("i-id").value;
+    const oldPath = $("i-old-path").value;
+    const data = {
+      marca: $("i-marca").value,
+      producto: $("i-producto").value,
+      talle: $("i-talle").value,
+      modelo: $("i-modelo").value.trim(),
+      precio: Number($("i-precio").value || 0),
+      stock: Math.max(0, parseInt($("i-stock").value || 0, 10))
+    };
+
+    // Si eligió una imagen nueva, la subimos primero
+    if (selectedFile) {
+      const img = await uploadImage(selectedFile);
+      data.imagen_url = img.url;
+      data.imagen_path = img.path;
+    }
+
+    if (id) {
+      const { error } = await sb.from("products").update(data).eq("id", id);
+      if (error) throw error;
+      // Si reemplazó la imagen, borramos la anterior
+      if (selectedFile && oldPath) await removeImage(oldPath);
+    } else {
+      const { error } = await sb.from("products").insert(data);
+      if (error) throw error;
+    }
+
+    resetForm();
+    await loadItems();
+    msg("item-msg", "Guardado correctamente", "good");
+  } catch (err) {
+    msg("item-msg", err.message || "Error al guardar", "err");
+  } finally {
+    $("save-btn").disabled = false;
+  }
+});
+
+function editar(id) {
+  const it = items.find(x => x.id === id);
+  if (!it) return;
+  $("i-id").value = it.id;
+  $("i-old-path").value = it.imagen_path || "";
+  $("i-marca").value = it.marca;
+  $("i-producto").value = it.producto;
+  $("i-talle").value = it.talle;
+  $("i-modelo").value = it.modelo || "";
+  $("i-precio").value = it.precio;
+  $("i-stock").value = it.stock;
+  $("i-preview").src = it.imagen_url || "";
+  $("form-title").textContent = "Editando producto";
+  $("save-btn").textContent = "Actualizar";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function resetForm() {
+  $("item-form").reset();
+  $("i-id").value = "";
+  $("i-old-path").value = "";
+  $("i-preview").removeAttribute("src");
+  selectedFile = null;
+  $("form-title").textContent = "Nuevo producto";
+  $("save-btn").textContent = "Guardar";
+}
+$("cancel-btn").addEventListener("click", resetForm);
+
+async function eliminar(id) {
+  const it = items.find(x => x.id === id);
+  if (!confirm(`¿Eliminar ${it.marca} ${it.producto} talle ${it.talle}?`)) return;
+  const { error } = await sb.from("products").delete().eq("id", id);
+  if (error) return alert(error.message);
+  await removeImage(it.imagen_path);
+  loadItems();
+}
+
+async function ajustar(id, delta) {
+  const it = items.find(x => x.id === id);
+  const nuevo = Math.max(0, Number(it.stock) + delta);
+  const { error } = await sb.from("products").update({ stock: nuevo }).eq("id", id);
+  if (error) return alert(error.message);
+  it.stock = nuevo;
+  renderTable();
+}
+</script>
+</body>
+</html>
