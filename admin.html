@@ -88,7 +88,9 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 const BUCKET = "product-images";
 const MARCAS = ["VOUK","VITAL","Hyperfly","Future","Progress","Bearfoot"];
-const PRODUCTOS = ["Rushguard","Shorts"];
+const PRODUCTOS = ["Rushguard","Shorts","Kimono"];
+const TIPOS = ["gi","no-gi"];
+const TIPO_POR_PRODUCTO = { Rushguard:"no-gi", Shorts:"no-gi", Kimono:"gi" };
 const TALLES = ["XS","S","M","L","XL","XXL"];
 const MAX_MB = 5;
 let models = [];
@@ -211,7 +213,7 @@ function renderTable() {
     <tr>
       <td>${md.imagen_url ? `<img class="thumb-sm" src="${esc(md.imagen_url)}" alt="">` : "—"}</td>
       <td>${esc(md.marca)}</td>
-      <td>${esc(md.producto)}</td>
+      <td>${esc(md.producto)} <span class="badge">${TIPO_POR_PRODUCTO[md.producto] || ""}</span></td>
       <td>${esc(md.nombre)}</td>
       <td>${money(md.precio)}</td>
       <td>

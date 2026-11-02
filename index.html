@@ -19,6 +19,7 @@
       <label>Marca<select id="f-marca"></select></label>
       <label>Producto<select id="f-producto"></select></label>
       <label>Talle<select id="f-talle"></select></label>
+      <label>Tipo<select id="f-tipo"></select></label>
       <label>Color<select id="f-color"></select></label>
       <button class="sec" id="reset">Limpiar</button>
     </div>
@@ -33,7 +34,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const MARCAS = ["VOUK","VITAL","Hyperfly","Future","Progress","Bearfoot"];
 const PRODUCTOS = ["Rushguard","Shorts"];
 const TALLES = ["XS","S","M","L","XL","XXL"];
-const FILTROS = ["f-marca","f-producto","f-talle","f-color"];
+const FILTROS = ["f-marca","f-producto","f-talle","f-tipo","f-color"];
 let models = [];
 
 const $ = id => document.getElementById(id);
@@ -48,6 +49,7 @@ function fill(id, arr, all) {
 fill("f-marca", MARCAS, "Todas");
 fill("f-producto", PRODUCTOS, "Todos");
 fill("f-talle", TALLES, "Todos");
+fill("f-tipo", TIPOS, "Todos");
 FILTROS.forEach(id => $(id).addEventListener("change", render));
 $("reset").addEventListener("click", () => { FILTROS.forEach(id => $(id).value = ""); render(); });
 
@@ -78,10 +80,12 @@ async function load() {
 function render() {
   const m = $("f-marca").value, p = $("f-producto").value;
   const t = $("f-talle").value, c = $("f-color").value;
+  const tp = $("f-tipo").value;
 
   const list = models.filter(md =>
     (!m || md.marca === m) &&
     (!p || md.producto === p) &&
+    (!tp || TIPO_POR_PRODUCTO[md.producto] === tp) &&
     (!t || md.product_variants.some(v => v.talle === t)) &&
     (!c || md.product_variants.some(v => v.color === c)));
 
@@ -96,6 +100,7 @@ function render() {
     : `<div class="empty">No hay productos con esos filtros.</div>`;
 }
 
+
 function card(md) {
   const colores = groupByColor(md.product_variants);
   return `
@@ -104,7 +109,7 @@ function card(md) {
         ? `<img src="${esc(md.imagen_url)}" alt="${esc(md.producto)} ${esc(md.marca)}" loading="lazy">`
         : `<div class="noimg" style="height:200px">Sin imagen</div>`}
       <div class="body">
-        <h3>${esc(md.marca)} · ${esc(md.producto)}</h3>
+        <h3>${esc(md.marca)} · ${esc(md.producto)} <span class="badge">${TIPO_POR_PRODUCTO[md.producto] || ""}</span></h3>
         <div class="meta">
           ${esc(md.nombre)}<br>
           Precio: <b>${money(md.precio)}</b>
