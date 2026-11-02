@@ -38,3 +38,12 @@ th{color:var(--mut);font-size:12px;text-transform:uppercase}
 .login form{display:flex;flex-direction:column;gap:12px}
 .hidden{display:none!important}
 .empty{color:var(--mut);text-align:center;padding:30px}
+.color-block{margin-top:10px}
+.sizes{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.size{padding:3px 8px;border-radius:6px;font-size:12px;font-weight:700}
+.size.in{background:#16351f;color:var(--ok)}
+.size.out{background:#2a1c1f;color:var(--mut);text-decoration:line-through}
+.var-row{display:grid;grid-template-columns:100px 1fr 110px auto;gap:8px;align-items:center;margin-bottom:8px}
+.var-row input,.var-row select{min-width:0;width:100%}
+.var-list .row{margin-bottom:6px;font-size:13px}
+.thumb-sm{width:56px;height:56px;object-fit:cover;border-radius:6px}

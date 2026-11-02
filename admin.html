@@ -1,4 +1,3 @@
-<!-- admin.html -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -19,7 +18,6 @@
 </header>
 <main>
 
-  <!-- LOGIN -->
   <section id="view-login" class="hidden">
     <div class="card login">
       <h2 style="margin-top:0">Ingresar</h2>
@@ -32,29 +30,33 @@
     </div>
   </section>
 
-  <!-- PANEL -->
   <section id="view-admin" class="hidden">
     <div class="card">
-      <h3 style="margin-top:0" id="form-title">Nuevo producto</h3>
+      <h3 style="margin-top:0" id="form-title">Nuevo modelo</h3>
       <form id="item-form">
         <input type="hidden" id="i-id">
         <input type="hidden" id="i-old-path">
+
         <div class="row" style="align-items:flex-start;gap:18px;margin-bottom:14px">
           <img id="i-preview" class="preview" alt="Vista previa">
-          <label>Imagen del producto
+          <label>Imagen del modelo
             <input type="file" id="i-file" accept="image/*">
           </label>
-          <small class="meta" id="i-file-hint">JPG, PNG o WEBP. Máximo 5 MB.</small>
+          <small class="meta">JPG, PNG o WEBP. Máximo 5 MB.</small>
         </div>
+
         <div class="form-grid">
           <label>Marca<select id="i-marca" required></select></label>
           <label>Producto<select id="i-producto" required></select></label>
-          <label>Talle<select id="i-talle" required></select></label>
-          <label>Modelo / Color<input id="i-modelo"></label>
+          <label>Nombre del modelo<input id="i-nombre" placeholder="Ej: Classic Pro"></label>
           <label>Precio<input type="number" id="i-precio" min="0" step="0.01" value="0"></label>
-          <label>Stock<input type="number" id="i-stock" min="0" step="1" value="0" required></label>
         </div>
-        <div class="row" style="margin-top:14px">
+
+        <h4 style="margin:20px 0 8px">Talles, colores y stock</h4>
+        <div id="variants"></div>
+        <button type="button" class="sec small" id="add-variant">+ Agregar talle / color</button>
+
+        <div class="row" style="margin-top:18px">
           <button type="submit" class="ok" id="save-btn">Guardar</button>
           <button type="button" class="sec" id="cancel-btn">Cancelar</button>
           <span id="item-msg" class="msg"></span>
@@ -71,7 +73,7 @@
       </div>
       <div style="overflow-x:auto">
         <table>
-          <thead><tr><th>Foto</th><th>Marca</th><th>Producto</th><th>Talle</th><th>Modelo</th><th>Precio</th><th>Stock</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Foto</th><th>Marca</th><th>Producto</th><th>Modelo</th><th>Precio</th><th>Talles / colores / stock</th><th>Acciones</th></tr></thead>
           <tbody id="adm-body"></tbody>
         </table>
       </div>
@@ -82,42 +84,48 @@
 <script>
 const { SUPABASE_URL, SUPABASE_ANON_KEY, ADMIN_EMAIL } = window.GISHOP_CONFIG;
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true } // sesión guardada en el navegador
+  auth: { persistSession: true, autoRefreshToken: true }
 });
 const BUCKET = "product-images";
 const MARCAS = ["VOUK","VITAL","Hyperfly","Future","Progress","Bearfoot"];
 const PRODUCTOS = ["Rushguard","Shorts"];
 const TALLES = ["XS","S","M","L","XL","XXL"];
 const MAX_MB = 5;
-let items = [];
+let models = [];
 let selectedFile = null;
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const money = n => Number(n || 0).toLocaleString("es-AR", {style:"currency", currency:"ARS", maximumFractionDigits:0});
-const msg = (id, text, cls) => { $(id).textContent = text; $(id).className = "msg " + cls; if (text) setTimeout(() => $(id).textContent = "", 3000); };
+const msg = (id, text, cls, ms = 3000) => {
+  $(id).textContent = text; $(id).className = "msg " + cls;
+  if (text) setTimeout(() => $(id).textContent = "", ms);
+};
+const sortVariants = vs => [...vs].sort((a, b) =>
+  TALLES.indexOf(a.talle) - TALLES.indexOf(b.talle) || (a.color || "").localeCompare(b.color || ""));
 
 function fill(id, arr, all) {
-  $(id).innerHTML = (all ? `<option value="">${all}</option>` : "") + arr.map(v => `<option>${v}</option>`).join("");
+  $(id).innerHTML = (all ? `<option value="">${all}</option>` : "") +
+    arr.map(v => `<option>${esc(v)}</option>`).join("");
 }
-fill("i-marca", MARCAS); fill("i-producto", PRODUCTOS); fill("i-talle", TALLES);
+fill("i-marca", MARCAS); fill("i-producto", PRODUCTOS);
 fill("a-marca", MARCAS, "Todas"); fill("a-producto", PRODUCTOS, "Todos"); fill("a-talle", TALLES, "Todos");
 ["a-marca","a-producto","a-talle"].forEach(id => $(id).addEventListener("change", renderTable));
 $("a-q").addEventListener("input", renderTable);
 
 /* ---------- Sesión ---------- */
-sb.auth.onAuthStateChange((_event, session) => show(session));
+sb.auth.onAuthStateChange((_e, session) => show(session));
 
 async function show(session) {
-  const isAdmin = session && session.user.email === ADMIN_EMAIL;
+  const isAdmin = !!session && session.user.email === ADMIN_EMAIL;
   if (session && !isAdmin) {
     await sb.auth.signOut();
-    return msg("l-msg", "Esta cuenta no tiene permisos de administrador", "err");
+    return msg("l-msg", "Esta cuenta no tiene permisos de administrador", "err", 5000);
   }
-  $("view-login").classList.toggle("hidden", !!isAdmin);
+  $("view-login").classList.toggle("hidden", isAdmin);
   $("view-admin").classList.toggle("hidden", !isAdmin);
   $("logout").classList.toggle("hidden", !isAdmin);
-  if (isAdmin) loadItems();
+  if (isAdmin) { loadModels(); if (!$("variants").children.length) addVariantRow(); }
 }
 
 $("login-form").addEventListener("submit", async e => {
@@ -128,9 +136,33 @@ $("login-form").addEventListener("submit", async e => {
     password: $("l-pass").value
   });
   $("l-btn").disabled = false;
-  if (error) msg("l-msg", "Email o contraseña incorrectos", "err");
+  if (error) msg("l-msg", "Email o contraseña incorrectos", "err", 5000);
 });
 $("logout").addEventListener("click", e => { e.preventDefault(); sb.auth.signOut(); });
+
+/* ---------- Variantes (talle + color + stock) ---------- */
+function talleOptions(sel) {
+  return TALLES.map(t => `<option ${t === sel ? "selected" : ""}>${t}</option>`).join("");
+}
+function addVariantRow(v = { talle: "M", color: "", stock: 0 }) {
+  const row = document.createElement("div");
+  row.className = "var-row";
+  row.innerHTML = `
+    <select class="v-talle">${talleOptions(v.talle)}</select>
+    <input class="v-color" placeholder="Color (ej: Negro)" value="${esc(v.color)}">
+    <input class="v-stock" type="number" min="0" step="1" value="${v.stock}">
+    <button type="button" class="small danger v-del">Quitar</button>`;
+  row.querySelector(".v-del").onclick = () => row.remove();
+  $("variants").appendChild(row);
+}
+function readVariants() {
+  return [...document.querySelectorAll(".var-row")].map(r => ({
+    talle: r.querySelector(".v-talle").value,
+    color: r.querySelector(".v-color").value.trim(),
+    stock: Math.max(0, parseInt(r.querySelector(".v-stock").value || 0, 10))
+  }));
+}
+$("add-variant").addEventListener("click", () => addVariantRow());
 
 /* ---------- Imagen ---------- */
 $("i-file").addEventListener("change", e => {
@@ -154,100 +186,136 @@ async function removeImage(path) {
   if (path) await sb.storage.from(BUCKET).remove([path]);
 }
 
-/* ---------- CRUD ---------- */
-async function loadItems() {
-  const { data, error } = await sb.from("products").select("*").order("marca").order("talle");
-  if (error) return msg("item-msg", error.message, "err");
-  items = data;
+/* ---------- Tabla ---------- */
+async function loadModels() {
+  const { data, error } = await sb
+    .from("product_models")
+    .select("*, product_variants(*)")
+    .order("created_at", { ascending: false });
+  if (error) return msg("item-msg", error.message, "err", 5000);
+  models = data.map(md => ({ ...md, product_variants: md.product_variants || [] }));
   renderTable();
 }
 
 function renderTable() {
   const m = $("a-marca").value, p = $("a-producto").value, t = $("a-talle").value;
   const q = $("a-q").value.toLowerCase();
-  const list = items.filter(i =>
-    (!m || i.marca === m) && (!p || i.producto === p) && (!t || i.talle === t) &&
-    (!q || (i.modelo || "").toLowerCase().includes(q)));
+  const list = models.filter(md =>
+    (!m || md.marca === m) && (!p || md.producto === p) &&
+    (!t || md.product_variants.some(v => v.talle === t)) &&
+    (!q || (md.nombre || "").toLowerCase().includes(q)));
 
-  $("adm-body").innerHTML = list.length ? list.map(i => `
+  $("adm-body").innerHTML = list.length ? list.map(md => {
+    const total = md.product_variants.reduce((s, v) => s + v.stock, 0);
+    return `
     <tr>
-      <td>${i.imagen_url ? `<img class="thumb" style="width:56px;height:56px;border-radius:6px" src="${esc(i.imagen_url)}" alt="">` : "—"}</td>
-      <td>${esc(i.marca)}</td>
-      <td>${esc(i.producto)}</td>
-      <td><span class="badge">${esc(i.talle)}</span></td>
-      <td>${esc(i.modelo)}</td>
-      <td>${money(i.precio)}</td>
+      <td>${md.imagen_url ? `<img class="thumb-sm" src="${esc(md.imagen_url)}" alt="">` : "—"}</td>
+      <td>${esc(md.marca)}</td>
+      <td>${esc(md.producto)}</td>
+      <td>${esc(md.nombre)}</td>
+      <td>${money(md.precio)}</td>
       <td>
-        <div class="row">
-          <button class="small sec" onclick="ajustar('${i.id}',-1)">−</button>
-          <b class="${i.stock > 0 ? "ok-txt" : "no-txt"}">${i.stock}</b>
-          <button class="small sec" onclick="ajustar('${i.id}',1)">+</button>
+        <div class="var-list">
+          ${sortVariants(md.product_variants).map(v => `
+            <div class="row">
+              <span class="badge">${esc(v.talle)}</span> ${esc(v.color || "Único")}
+              <button class="small sec" data-act="vstock" data-vid="${v.id}" data-delta="-1">−</button>
+              <b class="${v.stock > 0 ? "ok-txt" : "no-txt"}">${v.stock}</b>
+              <button class="small sec" data-act="vstock" data-vid="${v.id}" data-delta="1">+</button>
+            </div>`).join("") || `<span class="meta">Sin variantes</span>`}
         </div>
+        <small class="meta">Total: ${total} unid.</small>
       </td>
       <td>
         <div class="row">
-          <button class="small" onclick="editar('${i.id}')">Editar</button>
-          <button class="small danger" onclick="eliminar('${i.id}')">Borrar</button>
+          <button class="small" data-act="edit" data-id="${md.id}">Editar</button>
+          <button class="small danger" data-act="del" data-id="${md.id}">Borrar</button>
         </div>
       </td>
-    </tr>`).join("") : `<tr><td colspan="8" class="empty">Sin resultados</td></tr>`;
+    </tr>`;
+  }).join("") : `<tr><td colspan="7" class="empty">Sin resultados</td></tr>`;
 }
 
+$("adm-body").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  const { act, id, vid, delta } = btn.dataset;
+  if (act === "edit") editar(id);
+  if (act === "del") eliminar(id);
+  if (act === "vstock") ajustarVariante(vid, Number(delta));
+});
+
+/* ---------- Guardar modelo + variantes ---------- */
 $("item-form").addEventListener("submit", async e => {
   e.preventDefault();
+  const variants = readVariants();
+  if (!variants.length) return msg("item-msg", "Agregá al menos un talle", "err", 4000);
+
+  const keys = variants.map(v => v.talle + "|" + v.color.toLowerCase());
+  if (new Set(keys).size !== keys.length)
+    return msg("item-msg", "Hay talle + color repetido. Revisá las filas.", "err", 4000);
+
   $("save-btn").disabled = true;
+  let newPath = null;
   try {
     const id = $("i-id").value;
     const oldPath = $("i-old-path").value;
     const data = {
       marca: $("i-marca").value,
       producto: $("i-producto").value,
-      talle: $("i-talle").value,
-      modelo: $("i-modelo").value.trim(),
-      precio: Number($("i-precio").value || 0),
-      stock: Math.max(0, parseInt($("i-stock").value || 0, 10))
+      nombre: $("i-nombre").value.trim(),
+      precio: Number($("i-precio").value || 0)
     };
 
-    // Si eligió una imagen nueva, la subimos primero
     if (selectedFile) {
       const img = await uploadImage(selectedFile);
       data.imagen_url = img.url;
       data.imagen_path = img.path;
+      newPath = img.path;
     }
 
+    let modelId = id;
     if (id) {
-      const { error } = await sb.from("products").update(data).eq("id", id);
+      const { error } = await sb.from("product_models").update(data).eq("id", id);
       if (error) throw error;
-      // Si reemplazó la imagen, borramos la anterior
-      if (selectedFile && oldPath) await removeImage(oldPath);
+      const { error: delErr } = await sb.from("product_variants").delete().eq("model_id", id);
+      if (delErr) throw delErr;
     } else {
-      const { error } = await sb.from("products").insert(data);
+      const { data: row, error } = await sb.from("product_models").insert(data).select("id").single();
       if (error) throw error;
+      modelId = row.id;
     }
 
+    const { error: varErr } = await sb.from("product_variants")
+      .insert(variants.map(v => ({ ...v, model_id: modelId })));
+    if (varErr) throw varErr;
+
+    if (selectedFile && oldPath) await removeImage(oldPath);
     resetForm();
-    await loadItems();
+    await loadModels();
     msg("item-msg", "Guardado correctamente", "good");
   } catch (err) {
-    msg("item-msg", err.message || "Error al guardar", "err");
+    if (newPath) await removeImage(newPath);
+    msg("item-msg", err.message || "Error al guardar", "err", 5000);
   } finally {
     $("save-btn").disabled = false;
   }
 });
 
 function editar(id) {
-  const it = items.find(x => x.id === id);
-  if (!it) return;
-  $("i-id").value = it.id;
-  $("i-old-path").value = it.imagen_path || "";
-  $("i-marca").value = it.marca;
-  $("i-producto").value = it.producto;
-  $("i-talle").value = it.talle;
-  $("i-modelo").value = it.modelo || "";
-  $("i-precio").value = it.precio;
-  $("i-stock").value = it.stock;
-  $("i-preview").src = it.imagen_url || "";
-  $("form-title").textContent = "Editando producto";
+  const md = models.find(x => x.id === id);
+  if (!md) return;
+  $("i-id").value = md.id;
+  $("i-old-path").value = md.imagen_path || "";
+  $("i-marca").value = md.marca;
+  $("i-producto").value = md.producto;
+  $("i-nombre").value = md.nombre || "";
+  $("i-precio").value = md.precio;
+  $("i-preview").src = md.imagen_url || "";
+  $("variants").innerHTML = "";
+  sortVariants(md.product_variants).forEach(v => addVariantRow(v));
+  if (!md.product_variants.length) addVariantRow();
+  $("form-title").textContent = "Editando modelo";
   $("save-btn").textContent = "Actualizar";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -258,26 +326,30 @@ function resetForm() {
   $("i-old-path").value = "";
   $("i-preview").removeAttribute("src");
   selectedFile = null;
-  $("form-title").textContent = "Nuevo producto";
+  $("variants").innerHTML = "";
+  addVariantRow();
+  $("form-title").textContent = "Nuevo modelo";
   $("save-btn").textContent = "Guardar";
 }
 $("cancel-btn").addEventListener("click", resetForm);
 
 async function eliminar(id) {
-  const it = items.find(x => x.id === id);
-  if (!confirm(`¿Eliminar ${it.marca} ${it.producto} talle ${it.talle}?`)) return;
-  const { error } = await sb.from("products").delete().eq("id", id);
+  const md = models.find(x => x.id === id);
+  if (!md || !confirm(`¿Eliminar "${md.nombre || md.producto}" con todas sus variantes?`)) return;
+  const { error } = await sb.from("product_models").delete().eq("id", id);
   if (error) return alert(error.message);
-  await removeImage(it.imagen_path);
-  loadItems();
+  await removeImage(md.imagen_path);
+  loadModels();
 }
 
-async function ajustar(id, delta) {
-  const it = items.find(x => x.id === id);
-  const nuevo = Math.max(0, Number(it.stock) + delta);
-  const { error } = await sb.from("products").update({ stock: nuevo }).eq("id", id);
+async function ajustarVariante(vid, delta) {
+  let variant = null;
+  models.some(md => (variant = md.product_variants.find(v => v.id === vid)));
+  if (!variant) return;
+  const nuevo = Math.max(0, variant.stock + delta);
+  const { error } = await sb.from("product_variants").update({ stock: nuevo }).eq("id", vid);
   if (error) return alert(error.message);
-  it.stock = nuevo;
+  variant.stock = nuevo;
   renderTable();
 }
 </script>
