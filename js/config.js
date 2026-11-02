@@ -1,6 +1,6 @@
 // js/config.js
 window.GISHOP_CONFIG = {
-  SUPABASE_URL: "https://TU-PROYECTO.supabase.co",
-  SUPABASE_ANON_KEY: "TU_ANON_PUBLIC_KEY",
-  ADMIN_EMAIL: "TU_GMAIL@gmail.com"
+  SUPABASE_URL: "https://iccgpuboiyuaolizwcju.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_DQS82l9aZTAjXee5QSNwMA_4pmGJjVV",
+  ADMIN_EMAIL: "nazarenojulianperez@gmail.com"
 };
