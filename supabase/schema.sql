@@ -12,14 +12,15 @@ create table if not exists catalog_models (
   nombre text not null,
   marca text not null,
   tipo text not null check (tipo in ('gi', 'no-gi', 'otros')),
-  subtipo text check (subtipo in ('rushguard', 'shorts')),
+  subtipo text not null,
   descripcion text not null default '',
   precio numeric not null default 0 check (precio >= 0),
   created_at timestamptz not null default now(),
-  -- el subtipo es obligatorio para no-gi y no aplica a gi / otros
-  constraint subtipo_solo_no_gi check (
-    (tipo = 'no-gi' and subtipo is not null) or
-    (tipo <> 'no-gi' and subtipo is null)
+  -- todo producto tiene subtipo, y tiene que corresponder a su tipo
+  constraint subtipo_segun_tipo check (
+    (tipo = 'gi' and subtipo in ('kimonos', 'faixas')) or
+    (tipo = 'no-gi' and subtipo in ('rushguard', 'shorts')) or
+    (tipo = 'otros' and subtipo in ('mochilas', 'remeras', 'buzos', 'gorras'))
   )
 );
 

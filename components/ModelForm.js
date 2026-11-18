@@ -49,8 +49,8 @@ export default function ModelForm({ model, onSaved, onCancel }) {
   const fail = text => setMsg({ text, ok: false });
 
   const changeTipo = value => {
+    if (value !== tipo) setSubtipo("");
     setTipo(value);
-    if (value !== "no-gi") setSubtipo("");
   };
 
   /* ---- helpers de estado ---- */
@@ -87,7 +87,7 @@ export default function ModelForm({ model, onSaved, onCancel }) {
   function validate() {
     if (!nombre.trim()) return "Falta el nombre del modelo";
     if (!marca.trim()) return "Falta la marca";
-    if (tipo === "no-gi" && !subtipo) return "Elegí el subtipo (rushguard o shorts)";
+    if (!subtipo) return "Elegí el subtipo";
     if (!colors.length) return "Agregá al menos un color";
     const seen = new Set();
     for (const c of colors) {
@@ -121,7 +121,7 @@ export default function ModelForm({ model, onSaved, onCancel }) {
         nombre: nombre.trim(),
         marca: marca.trim(),
         tipo,
-        subtipo: tipo === "no-gi" ? subtipo : null,
+        subtipo,
         precio: Number(precio) || 0,
         descripcion: descripcion.trim()
       };
@@ -239,14 +239,12 @@ export default function ModelForm({ model, onSaved, onCancel }) {
             {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
         </label>
-        {tipo === "no-gi" && (
-          <label>Subtipo
-            <select value={subtipo} onChange={e => setSubtipo(e.target.value)} required>
-              <option value="">Elegir...</option>
-              {SUBTIPOS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-          </label>
-        )}
+        <label>Subtipo
+          <select value={subtipo} onChange={e => setSubtipo(e.target.value)} required>
+            <option value="">Elegir...</option>
+            {SUBTIPOS[tipo].map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+        </label>
         <label>Precio (ARS)
           <input type="number" min="0" step="1" value={precio} onChange={e => setPrecio(e.target.value)} />
         </label>

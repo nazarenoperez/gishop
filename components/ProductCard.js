@@ -10,6 +10,7 @@ export default function ProductCard({ model, colors }) {
 
   const color = colors.find(c => c.id === colorId) || colors[0];
   const main = color.images[imgIdx] || color.images[0];
+  const agotado = color.variants.length > 0 && color.variants.every(v => v.stock <= 0);
 
   const pickColor = id => {
     setColorId(id);
@@ -18,11 +19,14 @@ export default function ProductCard({ model, colors }) {
 
   return (
     <article className="item">
-      {main ? (
-        <img className="main-img" src={main.url} alt={`${model.nombre} ${color.color}`} loading="lazy" />
-      ) : (
-        <div className="noimg">Sin imagen</div>
-      )}
+      <div className="item-media">
+        {main ? (
+          <img src={main.url} alt={`${model.nombre} ${color.color}`} loading="lazy" />
+        ) : (
+          <div className="noimg">Sin imagen</div>
+        )}
+        {agotado && <span className="tag">Agotado</span>}
+      </div>
 
       {color.images.length > 1 && (
         <div className="thumbs">
@@ -40,16 +44,11 @@ export default function ProductCard({ model, colors }) {
         </div>
       )}
 
-      <div className="body">
-        <div>
-          <h3>{model.nombre}</h3>
-          <div className="meta">
-            {model.marca} ·{" "}
-            <span className="badge">
-              {tipoLabel(model.tipo)}
-              {model.subtipo ? ` · ${subtipoLabel(model.subtipo)}` : ""}
-            </span>
-          </div>
+      <div className="item-info">
+        <h3 className="item-title">{model.nombre}</h3>
+        <div className="item-sub">
+          {model.marca} · {tipoLabel(model.tipo)}
+          {model.subtipo ? ` · ${subtipoLabel(model.subtipo)}` : ""}
         </div>
 
         <div className="price">{money(model.precio)}</div>
